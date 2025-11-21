@@ -232,7 +232,13 @@ class CRTTransferManager:
         self._shutdown(cancel)
 
     def download(
-        self, bucket, key, fileobj, extra_args=None, subscribers=None
+        self,
+        bucket,
+        key,
+        fileobj,
+        extra_args=None,
+        subscribers=None,
+        expected_size=None,
     ):
         if extra_args is None:
             extra_args = {}
@@ -246,6 +252,7 @@ class CRTTransferManager:
             fileobj=fileobj,
             extra_args=extra_args,
             subscribers=subscribers,
+            expected_size=expected_size,
         )
         return self._submit_transfer("get_object", callargs)
 

@@ -417,6 +417,19 @@ class TestNonRangedDownload(BaseDownloadTest):
         for allowed_upload_arg in self._manager.ALLOWED_DOWNLOAD_ARGS:
             self.assertIn(allowed_upload_arg, op_model.input_shape.members)
 
+    def test_can_provide_expected_size_below_threshold(self):
+        self.add_successful_get_object_responses()
+
+        call_kwargs = self.create_call_kwargs()
+        call_kwargs['expected_size'] = len(self.content)
+
+        future = self.manager.download(**call_kwargs)
+        future.result()
+
+        self.stubber.assert_no_pending_responses()
+        with open(self.filename, 'rb') as f:
+            self.assertEqual(self.content, f.read())
+
     def test_download_empty_object(self):
         self.content = b''
         self.stream = BytesIO(self.content)
@@ -553,6 +566,27 @@ class TestRangedDownload(BaseDownloadTest):
         future.result()
 
         # Ensure that the contents are correct
+        with open(self.filename, 'rb') as f:
+            self.assertEqual(self.content, f.read())
+
+    def test_can_provide_expected_size_with_etag(self):
+        expected_params = {
+            'Bucket': self.bucket,
+            'Key': self.key,
+        }
+        expected_ranges = ['bytes=0-3', 'bytes=4-7', 'bytes=8-']
+        self.add_successful_get_object_responses(
+            {**expected_params, 'IfMatch': self.etag}, expected_ranges
+        )
+
+        call_kwargs = self.create_call_kwargs()
+        call_kwargs['expected_size'] = len(self.content)
+        call_kwargs['subscribers'] = [ETagProvider(self.etag)]
+
+        future = self.manager.download(**call_kwargs)
+        future.result()
+
+        self.stubber.assert_no_pending_responses()
         with open(self.filename, 'rb') as f:
             self.assertEqual(self.content, f.read())
 

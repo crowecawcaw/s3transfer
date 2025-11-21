@@ -352,10 +352,19 @@ class DownloadSubmissionTask(SubmissionTask):
         :param bandwidth_limiter: The bandwidth limiter to use when
             downloading streams
         """
-        if (
+        # For multipart downloads, we need the etag for IfMatch validation.
+        # Only skip HeadObject if we have size and either:
+        # 1. Size is below multipart threshold (no etag needed), or
+        # 2. We already have an etag
+        needs_head_object = (
             transfer_future.meta.size is None
-            or transfer_future.meta.etag is None
-        ):
+            or (
+                transfer_future.meta.size >= config.multipart_threshold
+                and transfer_future.meta.etag is None
+            )
+        )
+
+        if needs_head_object:
             response = client.head_object(
                 Bucket=transfer_future.meta.call_args.bucket,
                 Key=transfer_future.meta.call_args.key,

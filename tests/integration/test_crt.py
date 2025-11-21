@@ -395,6 +395,24 @@ class TestCRTS3Transfers(BaseTransferManagerIntegTest):
         self._assert_subscribers_called(size)
         assert_files_equal(filename, self.download_path)
 
+    def test_download_with_expected_size(self):
+        size = 1024 * 1024
+        filename = self.files.create_file_with_size(self.s3_key, filesize=size)
+        self.upload_file(filename, self.s3_key)
+
+        transfer = self._create_s3_transfer()
+        with transfer:
+            future = transfer.download(
+                self.bucket_name,
+                self.s3_key,
+                self.download_path,
+                expected_size=size,
+                subscribers=[self.record_subscriber],
+            )
+            future.result()
+        self._assert_subscribers_called(size)
+        assert_files_equal(filename, self.download_path)
+
     def test_delete(self):
         transfer = self._create_s3_transfer()
         filename = self.files.create_file_with_size(

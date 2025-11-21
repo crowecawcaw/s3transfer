@@ -531,6 +531,39 @@ class TestCRTTransferManager(unittest.TestCase):
             # Check the fake response overwrites the file because of download
             self.assertEqual(f.read(), self.expected_download_content)
 
+    def test_download_with_expected_size(self):
+        future = self.transfer_manager.download(
+            self.bucket,
+            self.key,
+            self.filename,
+            {},
+            [self.record_subscriber],
+            expected_size=len(self.expected_download_content),
+        )
+        future.result()
+
+        callargs_kwargs = self.s3_crt_client.make_request.call_args[1]
+        self.assertEqual(
+            callargs_kwargs,
+            {
+                'request': mock.ANY,
+                'type': awscrt.s3.S3RequestType.GET_OBJECT,
+                'recv_filepath': mock.ANY,
+                'on_progress': mock.ANY,
+                'on_done': mock.ANY,
+                'on_body': None,
+                'checksum_config': self._get_expected_download_checksum_config(),
+            },
+        )
+        self._assert_expected_crt_http_request(
+            callargs_kwargs["request"],
+            expected_http_method='GET',
+            expected_content_length=0,
+        )
+        self._assert_subscribers_called(future)
+        with open(self.filename, 'rb') as f:
+            self.assertEqual(f.read(), self.expected_download_content)
+
     def test_download_to_seekable_stream(self):
         with open(self.filename, 'wb') as f:
             future = self.transfer_manager.download(

@@ -132,7 +132,7 @@ class TransferMeta(BaseTransferMeta):
     def __init__(self, call_args=None, transfer_id=None):
         self._call_args = call_args
         self._transfer_id = transfer_id
-        self._size = None
+        self._size = getattr(call_args, 'expected_size', None)
         self._user_context = {}
         self._etag = None
 

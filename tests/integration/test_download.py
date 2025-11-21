@@ -282,3 +282,46 @@ class TestDownload(BaseTransferManagerIntegTest):
                 'Should have been able to download to /dev/null but received '
                 f'following exception {e}'
             )
+
+    def test_download_with_expected_size_below_threshold(self):
+        transfer_manager = self.create_transfer_manager(self.config)
+
+        filename = self.files.create_file_with_size(
+            'foo.txt', filesize=1024 * 1024
+        )
+        self.upload_file(filename, '1mb.txt')
+
+        download_path = os.path.join(self.files.rootdir, 'downloaded.txt')
+        future = transfer_manager.download(
+            self.bucket_name,
+            '1mb.txt',
+            download_path,
+            expected_size=1024 * 1024,
+        )
+        future.result()
+        assert_files_equal(filename, download_path)
+
+    def test_download_with_expected_size_above_threshold(self):
+        transfer_manager = self.create_transfer_manager(self.config)
+
+        filename = self.files.create_file_with_size(
+            'foo.txt', filesize=20 * 1024 * 1024
+        )
+        self.upload_file(filename, '20mb.txt')
+
+        download_path = os.path.join(self.files.rootdir, 'downloaded.txt')
+        response = self.client.head_object(
+            Bucket=self.bucket_name, Key='20mb.txt'
+        )
+        subscriber = RecordingSubscriber()
+        future = transfer_manager.download(
+            self.bucket_name,
+            '20mb.txt',
+            download_path,
+            expected_size=20 * 1024 * 1024,
+            subscribers=[subscriber],
+        )
+        future.meta.provide_object_etag(response['ETag'])
+        future.result()
+        assert_files_equal(filename, download_path)
+        self.assertEqual(subscriber.calculate_bytes_seen(), 20 * 1024 * 1024)

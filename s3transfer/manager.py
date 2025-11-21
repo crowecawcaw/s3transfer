@@ -351,7 +351,13 @@ class TransferManager:
         )
 
     def download(
-        self, bucket, key, fileobj, extra_args=None, subscribers=None
+        self,
+        bucket,
+        key,
+        fileobj,
+        extra_args=None,
+        subscribers=None,
+        expected_size=None,
     ):
         """Downloads a file from S3
 
@@ -375,6 +381,12 @@ class TransferManager:
             order provided based on the event emit during the process of
             the transfer request.
 
+        :type expected_size: int
+        :param expected_size: The expected size in bytes of the download. If
+            provided, the downloader will not call HeadObject to determine the
+            object's size and use the provided value instead. The size is
+            needed to determine whether to do a multipart download.
+
         :rtype: s3transfer.futures.TransferFuture
         :returns: Transfer future representing the download
         """
@@ -390,6 +402,7 @@ class TransferManager:
             fileobj=fileobj,
             extra_args=extra_args,
             subscribers=subscribers,
+            expected_size=expected_size,
         )
         extra_main_kwargs = {'io_executor': self._io_executor}
         if self._bandwidth_limiter:
