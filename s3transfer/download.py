@@ -460,9 +460,10 @@ class DownloadSubmissionTask(SubmissionTask):
                     'download_output_manager': download_output_manager,
                     'io_chunksize': config.io_chunksize,
                     'bandwidth_limiter': bandwidth_limiter,
-                    'transfer_meta': self._get_transfer_meta_to_record(
-                        transfer_future
-                    ),
+                    # The single GetObject is not pinned to the HeadObject
+                    # ETag, so its response is the one that describes the
+                    # downloaded bytes.
+                    'transfer_meta': transfer_future.meta,
                 },
                 done_callbacks=[final_task],
             ),
@@ -505,8 +506,10 @@ class DownloadSubmissionTask(SubmissionTask):
                 download_output_manager, io_executor
             )
         )
-        # Only the first ranged GET needs to record the object metadata;
-        # every part returns the same object-level response fields.
+        # Every part is pinned to the same ETag, so only the first ranged
+        # GET needs to record the object metadata. Its ContentLength and
+        # ContentRange describe that part rather than the whole object,
+        # which is accepted to avoid rewriting the S3 response.
         transfer_meta = self._get_transfer_meta_to_record(transfer_future)
         for i in range(num_parts):
             # Calculate the range parameter
@@ -549,8 +552,8 @@ class DownloadSubmissionTask(SubmissionTask):
 
     def _get_transfer_meta_to_record(self, transfer_future):
         # The HeadObject response is used when available. Otherwise, such as
-        # when the caller provided both the size and etag, the GetObject
-        # response is recorded instead.
+        # when the caller provided both the size and etag, the first
+        # GetObject response is recorded instead.
         if transfer_future.meta.object_metadata is None:
             return transfer_future.meta
         return None
@@ -636,6 +639,7 @@ class DownloadSubmissionTask(SubmissionTask):
                 'download_output_manager': download_output_manager,
                 'io_chunksize': config.io_chunksize,
                 'bandwidth_limiter': bandwidth_limiter,
+                'transfer_meta': transfer_future.meta,
             },
             done_callbacks=[on_done_callback],
         )
@@ -700,7 +704,6 @@ class GetObjectFirstChunkOnDoneCallback:
         size, etag = self._extract_metadata(response)
         self._transfer_future.meta.provide_transfer_size(size)
         self._transfer_future.meta.provide_object_etag(etag)
-        self._transfer_future.meta.provide_object_metadata(response)
 
         if size == 0:
             # Queue an empty write through the io executor so the
@@ -830,13 +833,13 @@ class GetObjectTask(Task):
                 )
                 # Store response so callback can extract metadata
                 self._response = response
-                if transfer_meta is not None:
-                    transfer_meta.provide_object_metadata(response)
 
                 self._validate_content_range(
                     extra_args.get('Range'),
                     response.get('ContentRange'),
                 )
+                if transfer_meta is not None:
+                    transfer_meta.provide_object_metadata(response)
                 streaming_body = StreamReaderProgress(
                     response['Body'], callbacks
                 )

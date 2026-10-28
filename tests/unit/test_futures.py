@@ -23,6 +23,7 @@ from s3transfer.exceptions import (
 )
 from s3transfer.futures import (
     BaseExecutor,
+    BaseTransferMeta,
     BoundedExecutor,
     ExecutorFuture,
     NonThreadedExecutor,
@@ -145,6 +146,11 @@ class TestTransferFuture(unittest.TestCase):
             self.future.result()
 
 
+class TestBaseTransferMeta(unittest.TestCase):
+    def test_object_metadata_defaults_to_none(self):
+        self.assertIsNone(BaseTransferMeta().object_metadata)
+
+
 class TestTransferMeta(unittest.TestCase):
     def setUp(self):
         self.transfer_meta = TransferMeta()
@@ -189,6 +195,11 @@ class TestTransferMeta(unittest.TestCase):
                 'TagCount': 1,
             },
         )
+
+    def test_object_metadata_can_be_cleared(self):
+        self.transfer_meta.provide_object_metadata({'ETag': 'myetag'})
+        self.transfer_meta.provide_object_metadata(None)
+        self.assertIsNone(self.transfer_meta.object_metadata)
 
 
 class TestTransferCoordinator(unittest.TestCase):

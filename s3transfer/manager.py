@@ -610,8 +610,13 @@ class TransferManager:
             self._coordinator_controller.remove_transfer_coordinator,
             transfer_coordinator,
         )
+        transfer_meta = TransferMeta(call_args, transfer_id=transfer_id)
+        # Only expose the object metadata for transfers that succeed.
+        transfer_coordinator.add_failure_cleanup(
+            transfer_meta.provide_object_metadata, None
+        )
         components = {
-            'meta': TransferMeta(call_args, transfer_id=transfer_id),
+            'meta': transfer_meta,
             'coordinator': transfer_coordinator,
         }
         transfer_future = TransferFuture(**components)

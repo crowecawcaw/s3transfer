@@ -1,5 +1,0 @@
-{
-  "type": "feature",
-  "category": "TransferMeta",
-  "description": "Expose the S3 response for the stored object on TransferFuture.meta.object_metadata for uploads and downloads, including fields such as Metadata, Expiration, TagCount, VersionId and ETag."
-}

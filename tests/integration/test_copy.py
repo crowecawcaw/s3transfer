@@ -59,6 +59,35 @@ class TestCopy(BaseTransferManagerIntegTest):
         future.result()
         self.assertTrue(self.object_exists(new_key))
 
+    def assert_object_metadata_after_copy(self, key, filesize):
+        new_key = f'copy-{key}'
+        self.put_object_with_metadata(key, filesize)
+        transfer_manager = self.create_transfer_manager(self.config)
+
+        future = transfer_manager.copy(
+            copy_source={'Bucket': self.bucket_name, 'Key': key},
+            bucket=self.bucket_name,
+            key=new_key,
+        )
+        self.addCleanup(self.delete_object, new_key)
+        future.result()
+        return self.assert_written_object_metadata(future, new_key)
+
+    def test_object_metadata_below_threshold(self):
+        object_metadata = self.assert_object_metadata_after_copy(
+            'metadata-1mb.txt', filesize=1024 * 1024
+        )
+        # CopyObjectResult is flattened into the top level.
+        self.assertNotIn('CopyObjectResult', object_metadata)
+        self.assertIn('LastModified', object_metadata)
+
+    def test_object_metadata_above_threshold(self):
+        object_metadata = self.assert_object_metadata_after_copy(
+            'metadata-20mb.txt', filesize=20 * 1024 * 1024
+        )
+        # A multipart copy ETag ends with the number of parts.
+        self.assertRegex(object_metadata['ETag'], r'-\d+"$')
+
     def test_progress_subscribers_on_copy(self):
         subscriber = RecordingSubscriber()
         transfer_manager = self.create_transfer_manager(self.config)
