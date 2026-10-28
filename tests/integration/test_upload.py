@@ -28,6 +28,11 @@ from tests.integration import (
 
 
 class TestUpload(BaseTransferManagerIntegTest):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.add_expiration_lifecycle_rule('expiring/')
+
     def setUp(self):
         super().setUp()
         self.multipart_threshold = 5 * 1024 * 1024
@@ -55,6 +60,55 @@ class TestUpload(BaseTransferManagerIntegTest):
 
         future.result()
         self.assertTrue(self.object_exists('20mb.txt'))
+
+    def assert_object_metadata_matches_stored_object(self, future, key):
+        object_metadata = future.meta.object_metadata
+        head = self.client.head_object(Bucket=self.bucket_name, Key=key)
+        self.assertEqual(object_metadata['ETag'], head['ETag'])
+        self.assertIn(
+            'rule-id="expire-objects"', object_metadata['Expiration']
+        )
+        self.assertEqual(object_metadata['Expiration'], head['Expiration'])
+        self.assertNotIn('ResponseMetadata', object_metadata)
+        return object_metadata
+
+    def test_object_metadata_below_threshold(self):
+        transfer_manager = self.create_transfer_manager(self.config)
+        key = 'expiring/1mb.txt'
+        file = self.get_input_fileobj(size=1024 * 1024, name='1mb.txt')
+        future = transfer_manager.upload(
+            file,
+            self.bucket_name,
+            key,
+            extra_args={'Metadata': {'foo': 'bar'}, 'Tagging': 'a=b'},
+        )
+        self.addCleanup(self.delete_object, key)
+
+        future.result()
+        object_metadata = self.assert_object_metadata_matches_stored_object(
+            future, key
+        )
+        # A single PutObject has a plain MD5 ETag.
+        self.assertNotIn('-', object_metadata['ETag'])
+
+    def test_object_metadata_above_threshold(self):
+        transfer_manager = self.create_transfer_manager(self.config)
+        key = 'expiring/20mb.txt'
+        file = self.get_input_fileobj(size=20 * 1024 * 1024, name='20mb.txt')
+        future = transfer_manager.upload(
+            file,
+            self.bucket_name,
+            key,
+            extra_args={'Metadata': {'foo': 'bar'}, 'Tagging': 'a=b'},
+        )
+        self.addCleanup(self.delete_object, key)
+
+        future.result()
+        object_metadata = self.assert_object_metadata_matches_stored_object(
+            future, key
+        )
+        # A multipart upload ETag ends with the number of parts.
+        self.assertRegex(object_metadata['ETag'], r'-\d+"$')
 
     @skip_if_using_serial_implementation(
         'Exception is thrown once the transfer is submitted. '

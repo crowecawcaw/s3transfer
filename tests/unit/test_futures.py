@@ -168,6 +168,28 @@ class TestTransferMeta(unittest.TestCase):
         self.transfer_meta.user_context['foo'] = 'bar'
         self.assertEqual(self.transfer_meta.user_context, {'foo': 'bar'})
 
+    def test_object_metadata(self):
+        self.assertIsNone(self.transfer_meta.object_metadata)
+        self.transfer_meta.provide_object_metadata(
+            {
+                'Body': object(),
+                'ResponseMetadata': {'HTTPStatusCode': 200},
+                'ETag': 'myetag',
+                'Metadata': {'foo': 'bar'},
+                'Expiration': 'expiry-date="date", rule-id="rule"',
+                'TagCount': 1,
+            }
+        )
+        self.assertEqual(
+            self.transfer_meta.object_metadata,
+            {
+                'ETag': 'myetag',
+                'Metadata': {'foo': 'bar'},
+                'Expiration': 'expiry-date="date", rule-id="rule"',
+                'TagCount': 1,
+            },
+        )
+
 
 class TestTransferCoordinator(unittest.TestCase):
     def setUp(self):

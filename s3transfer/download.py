@@ -389,6 +389,7 @@ class DownloadSubmissionTask(SubmissionTask):
             # Provide an etag to ensure a stored object is not modified
             # during a multipart download.
             transfer_future.meta.provide_object_etag(response.get('ETag'))
+            transfer_future.meta.provide_object_metadata(response)
 
         # If it is greater than threshold do a ranged download, otherwise
         # do a regular GetObject download.
@@ -459,6 +460,9 @@ class DownloadSubmissionTask(SubmissionTask):
                     'download_output_manager': download_output_manager,
                     'io_chunksize': config.io_chunksize,
                     'bandwidth_limiter': bandwidth_limiter,
+                    'transfer_meta': self._get_transfer_meta_to_record(
+                        transfer_future
+                    ),
                 },
                 done_callbacks=[final_task],
             ),
@@ -501,6 +505,9 @@ class DownloadSubmissionTask(SubmissionTask):
                 download_output_manager, io_executor
             )
         )
+        # Only the first ranged GET needs to record the object metadata;
+        # every part returns the same object-level response fields.
+        transfer_meta = self._get_transfer_meta_to_record(transfer_future)
         for i in range(num_parts):
             # Calculate the range parameter
             range_parameter = calculate_range_parameter(
@@ -532,12 +539,21 @@ class DownloadSubmissionTask(SubmissionTask):
                         'download_output_manager': download_output_manager,
                         'io_chunksize': config.io_chunksize,
                         'bandwidth_limiter': bandwidth_limiter,
+                        'transfer_meta': transfer_meta if i == 0 else None,
                     },
                     done_callbacks=[finalize_download_invoker.decrement],
                 ),
                 tag=get_object_tag,
             )
         finalize_download_invoker.finalize()
+
+    def _get_transfer_meta_to_record(self, transfer_future):
+        # The HeadObject response is used when available. Otherwise, such as
+        # when the caller provided both the size and etag, the GetObject
+        # response is recorded instead.
+        if transfer_future.meta.object_metadata is None:
+            return transfer_future.meta
+        return None
 
     def _get_final_io_task_submission_callback(
         self, download_manager, io_executor
@@ -684,6 +700,7 @@ class GetObjectFirstChunkOnDoneCallback:
         size, etag = self._extract_metadata(response)
         self._transfer_future.meta.provide_transfer_size(size)
         self._transfer_future.meta.provide_object_etag(etag)
+        self._transfer_future.meta.provide_object_metadata(response)
 
         if size == 0:
             # Queue an empty write through the io executor so the
@@ -783,6 +800,7 @@ class GetObjectTask(Task):
         io_chunksize,
         start_index=0,
         bandwidth_limiter=None,
+        transfer_meta=None,
     ):
         """Downloads an object and places content into io queue
 
@@ -801,6 +819,7 @@ class GetObjectTask(Task):
             content of the key to.
         :param bandwidth_limiter: The bandwidth limiter to use when throttling
             the downloading of data in streams.
+        :param transfer_meta: The TransferMeta to record the response on.
         """
         last_exception = None
         for i in range(max_attempts):
@@ -811,6 +830,8 @@ class GetObjectTask(Task):
                 )
                 # Store response so callback can extract metadata
                 self._response = response
+                if transfer_meta is not None:
+                    transfer_meta.provide_object_metadata(response)
 
                 self._validate_content_range(
                     extra_args.get('Range'),

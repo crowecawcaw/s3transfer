@@ -39,7 +39,11 @@ from s3transfer.download import (
     IOWriteTask,
 )
 from s3transfer.exceptions import RetriesExceededError
-from s3transfer.futures import IN_MEMORY_DOWNLOAD_TAG, BoundedExecutor
+from s3transfer.futures import (
+    IN_MEMORY_DOWNLOAD_TAG,
+    BoundedExecutor,
+    TransferMeta,
+)
 from s3transfer.utils import CallArgs, OSUtils
 from tests import (
     BaseSubmissionTaskTest,
@@ -571,6 +575,85 @@ class TestDownloadSubmissionTask(BaseSubmissionTaskTest):
         # to that task submission.
         self.assert_tag_for_get_object(IN_MEMORY_DOWNLOAD_TAG)
 
+    def add_head_object_response_with_metadata(self):
+        self.stubber.add_response(
+            'head_object',
+            {
+                'ContentLength': len(self.content),
+                'ETag': self.etag,
+                'Metadata': {'source': 'head'},
+            },
+        )
+
+    def add_get_responses_with_metadata(self):
+        # Each GET reports a distinct metadata value so the tests can
+        # assert which response was recorded.
+        chunksize = self.config.multipart_chunksize
+        for i in range(0, len(self.content), chunksize):
+            self.stubber.add_response(
+                'get_object',
+                {
+                    'Body': BytesIO(self.content[i : i + chunksize]),
+                    'ETag': self.etag,
+                    'Metadata': {'source': f'get-{i}'},
+                },
+            )
+
+    def provide_size_and_etag(self):
+        self.transfer_future.meta.provide_transfer_size(len(self.content))
+        self.transfer_future.meta.provide_object_etag(self.etag)
+
+    def test_records_head_object_response(self):
+        self.add_head_object_response_with_metadata()
+        self.add_get_responses_with_metadata()
+
+        self.wait_and_assert_completed_successfully(self.submission_task)
+
+        self.assertEqual(
+            self.transfer_future.meta.object_metadata,
+            {
+                'ContentLength': len(self.content),
+                'ETag': self.etag,
+                'Metadata': {'source': 'head'},
+            },
+        )
+
+    def test_records_head_object_response_for_ranged_get(self):
+        self.configure_for_ranged_get()
+        self.add_head_object_response_with_metadata()
+        self.add_get_responses_with_metadata()
+
+        self.wait_and_assert_completed_successfully(self.submission_task)
+
+        self.assertEqual(
+            self.transfer_future.meta.object_metadata['Metadata'],
+            {'source': 'head'},
+        )
+
+    def test_records_get_object_response_when_head_is_skipped(self):
+        self.provide_size_and_etag()
+        self.add_get_responses_with_metadata()
+
+        self.wait_and_assert_completed_successfully(self.submission_task)
+
+        object_metadata = self.transfer_future.meta.object_metadata
+        self.assertEqual(object_metadata['Metadata'], {'source': 'get-0'})
+        self.assertEqual(object_metadata['ETag'], self.etag)
+        self.assertNotIn('Body', object_metadata)
+
+    def test_records_first_ranged_get_response_when_head_is_skipped(self):
+        self.configure_for_ranged_get()
+        self.provide_size_and_etag()
+        self.add_get_responses_with_metadata()
+
+        self.wait_and_assert_completed_successfully(self.submission_task)
+
+        # Only the first part's response is recorded.
+        self.assertEqual(
+            self.transfer_future.meta.object_metadata['Metadata'],
+            {'source': 'get-0'},
+        )
+
 
 class TestGetObjectTask(BaseTaskTest):
     def setUp(self):
@@ -624,6 +707,25 @@ class TestGetObjectTask(BaseTaskTest):
 
         self.stubber.assert_no_pending_responses()
         self.assert_io_writes([(0, self.content)])
+
+    def test_records_response_on_transfer_meta(self):
+        transfer_meta = TransferMeta()
+        self.stubber.add_response(
+            'get_object',
+            service_response={
+                'Body': self.stream,
+                'ETag': 'myetag',
+                'Metadata': {'foo': 'bar'},
+                'TagCount': 2,
+            },
+        )
+        task = self.get_download_task(transfer_meta=transfer_meta)
+        task()
+
+        self.assertEqual(
+            transfer_meta.object_metadata,
+            {'ETag': 'myetag', 'Metadata': {'foo': 'bar'}, 'TagCount': 2},
+        )
 
     def test_extra_args(self):
         self.stubber.add_response(
@@ -1117,3 +1219,23 @@ def test_first_chunk_callback_when_transfer_done_submits_final_task(
     first_chunk_callback.transfer_coordinator.submit.assert_called_once_with(
         first_chunk_callback.io_executor, first_chunk_callback.final_task
     )
+
+
+def test_first_chunk_callback_records_object_metadata(first_chunk_callback):
+    response = {
+        'ContentLength': 5,
+        'ContentRange': 'bytes 0-4/5',
+        'ETag': 'e',
+        'Metadata': {'foo': 'bar'},
+    }
+    task = mock.Mock()
+    task.get_response.return_value = response
+    callback = first_chunk_callback.callback
+    callback.set_task(task)
+    first_chunk_callback.transfer_coordinator.done.return_value = False
+    callback._config.multipart_chunksize = 8
+
+    callback()
+
+    meta = callback._transfer_future.meta
+    meta.provide_object_metadata.assert_called_once_with(response)

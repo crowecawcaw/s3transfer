@@ -33,6 +33,11 @@ from tests.integration import (
 
 
 class TestDownload(BaseTransferManagerIntegTest):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.add_expiration_lifecycle_rule('expiring/')
+
     def setUp(self):
         super().setUp()
         self.multipart_threshold = 5 * 1024 * 1024
@@ -88,6 +93,47 @@ class TestDownload(BaseTransferManagerIntegTest):
         )
         future.result()
         assert_files_equal(filename, download_path)
+
+    def assert_object_metadata_after_download(self, key, filesize):
+        filename = self.files.create_file_with_size(key, filesize=filesize)
+        with open(filename, 'rb') as f:
+            self.client.put_object(
+                Bucket=self.bucket_name,
+                Key=key,
+                Body=f,
+                Metadata={'foo': 'bar'},
+                Tagging='a=b&c=d',
+            )
+        self.addCleanup(self.delete_object, key)
+        transfer_manager = self.create_transfer_manager(self.config)
+
+        download_path = os.path.join(self.files.rootdir, 'downloaded')
+        future = transfer_manager.download(
+            self.bucket_name, key, download_path
+        )
+        future.result()
+        assert_files_equal(filename, download_path)
+
+        object_metadata = future.meta.object_metadata
+        head = self.client.head_object(Bucket=self.bucket_name, Key=key)
+        self.assertEqual(object_metadata['Metadata'], {'foo': 'bar'})
+        self.assertEqual(object_metadata['TagCount'], 2)
+        self.assertEqual(object_metadata['ETag'], head['ETag'])
+        self.assertIn(
+            'rule-id="expire-objects"', object_metadata['Expiration']
+        )
+        self.assertNotIn('Body', object_metadata)
+        self.assertNotIn('ResponseMetadata', object_metadata)
+
+    def test_object_metadata_below_threshold(self):
+        self.assert_object_metadata_after_download(
+            'expiring/1mb.txt', filesize=1024 * 1024
+        )
+
+    def test_object_metadata_above_threshold(self):
+        self.assert_object_metadata_after_download(
+            'expiring/20mb.txt', filesize=20 * 1024 * 1024
+        )
 
     @skip_if_using_serial_implementation(
         'Exception is thrown once the transfer is submitted. '

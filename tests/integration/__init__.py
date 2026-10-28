@@ -10,6 +10,8 @@
 # distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
+import time
+
 import botocore
 import botocore.session
 from botocore.exceptions import WaiterError
@@ -77,6 +79,39 @@ class BaseTransferManagerIntegTest(unittest.TestCase):
             },
         )
         cls.client.delete_public_access_block(Bucket=cls.bucket_name)
+
+    @classmethod
+    def add_expiration_lifecycle_rule(cls, prefix, timeout=300):
+        """Expire objects under ``prefix`` so S3 returns ``Expiration``
+
+        Lifecycle configuration takes time to propagate, so this waits until
+        a probe object reports the expiration.
+        """
+        cls.client.put_bucket_lifecycle_configuration(
+            Bucket=cls.bucket_name,
+            LifecycleConfiguration={
+                'Rules': [
+                    {
+                        'ID': 'expire-objects',
+                        'Filter': {'Prefix': prefix},
+                        'Status': 'Enabled',
+                        'Expiration': {'Days': 1},
+                    }
+                ]
+            },
+        )
+        probe_key = f'{prefix}lifecycle-probe'
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            response = cls.client.put_object(
+                Bucket=cls.bucket_name, Key=probe_key, Body=b''
+            )
+            if 'Expiration' in response:
+                return
+            time.sleep(5)
+        raise AssertionError(
+            f'Lifecycle rule was not applied within {timeout} seconds.'
+        )
 
     def setUp(self):
         self.files = FileCreator()

@@ -135,6 +135,7 @@ class TransferMeta(BaseTransferMeta):
         self._size = None
         self._user_context = {}
         self._etag = None
+        self._object_metadata = None
 
     @property
     def call_args(self):
@@ -161,6 +162,19 @@ class TransferMeta(BaseTransferMeta):
         """The etag of the stored object for validating multipart downloads"""
         return self._etag
 
+    @property
+    def object_metadata(self):
+        """Response fields S3 returned describing the stored object
+
+        For downloads this comes from the HeadObject response, or the first
+        GetObject response when the HEAD is skipped. For uploads it comes
+        from the PutObject or CompleteMultipartUpload response. Includes
+        fields such as ``Metadata``, ``Expiration``, ``TagCount``,
+        ``VersionId`` and ``ETag`` when S3 returns them. ``None`` until
+        the relevant request has completed.
+        """
+        return self._object_metadata
+
     def provide_transfer_size(self, size):
         """A method to provide the size of a transfer request
 
@@ -178,6 +192,14 @@ class TransferMeta(BaseTransferMeta):
         the etag as the value to GetObject requests.
         """
         self._etag = etag
+
+    def provide_object_metadata(self, response):
+        """A method to record the S3 response describing the object"""
+        self._object_metadata = {
+            k: v
+            for k, v in response.items()
+            if k not in ('Body', 'ResponseMetadata')
+        }
 
 
 class TransferCoordinator:

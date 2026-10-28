@@ -321,6 +321,54 @@ class BaseDownloadTest(BaseGeneralInterfaceTest):
         with open(self.filename, 'rb') as f:
             self.assertEqual(self.content, f.read())
 
+    def test_object_metadata_from_head_object(self):
+        head_response = self.create_stubbed_responses()[0]
+        head_response['service_response'].update(
+            {
+                'Metadata': {'foo': 'bar'},
+                'Expiration': 'expiry-date="Fri, 30 Oct 2026 00:00:00 GMT", rule-id="rule"',
+                'TagCount': 2,
+            }
+        )
+        self.stubber.add_response(**head_response)
+        self.add_successful_get_object_responses()
+
+        future = self.manager.download(**self.create_call_kwargs())
+        future.result()
+
+        self.assertEqual(
+            future.meta.object_metadata,
+            {
+                'ContentLength': len(self.content),
+                'ETag': self.etag,
+                'Metadata': {'foo': 'bar'},
+                'Expiration': 'expiry-date="Fri, 30 Oct 2026 00:00:00 GMT", rule-id="rule"',
+                'TagCount': 2,
+            },
+        )
+
+    def test_object_metadata_from_get_object_when_head_is_skipped(self):
+        for i, get_response in enumerate(self.create_stubbed_responses()[1:]):
+            get_response['service_response'].update(
+                {'ETag': self.etag, 'Metadata': {'part': str(i)}}
+            )
+            self.stubber.add_response(**get_response)
+
+        call_kwargs = self.create_call_kwargs()
+        call_kwargs['subscribers'] = [
+            FileSizeProvider(len(self.content)),
+            ETagProvider(self.etag),
+        ]
+        future = self.manager.download(**call_kwargs)
+        future.result()
+
+        self.stubber.assert_no_pending_responses()
+        # Only the first GetObject response is recorded.
+        self.assertEqual(
+            future.meta.object_metadata['Metadata'], {'part': '0'}
+        )
+        self.assertNotIn('Body', future.meta.object_metadata)
+
     def test_uses_provided_osutil(self):
         osutil = RecordingOSUtils()
         # Use the recording os utility for the transfer manager
@@ -769,6 +817,68 @@ class TestDownloadResponseChecksumValidationWhenRequired(StubbedClientTest):
 
         with open(self.filename, 'rb') as f:
             self.assertEqual(content, f.read())
+
+    def test_object_metadata_from_first_get_for_single_chunk(self):
+        self.stubber.add_response(
+            method='get_object',
+            service_response={
+                'Body': BytesIO(self.content),
+                'ContentRange': f'bytes 0-{len(self.content) - 1}/{len(self.content)}',
+                'ETag': self.etag,
+                'Metadata': {'foo': 'bar'},
+                'Expiration': 'expiry-date="Fri, 30 Oct 2026 00:00:00 GMT", rule-id="rule"',
+                'TagCount': 2,
+            },
+        )
+
+        future = self.manager.download(self.bucket, self.key, self.filename)
+        future.result()
+
+        object_metadata = future.meta.object_metadata
+        self.assertEqual(object_metadata['Metadata'], {'foo': 'bar'})
+        self.assertEqual(
+            object_metadata['Expiration'],
+            'expiry-date="Fri, 30 Oct 2026 00:00:00 GMT", rule-id="rule"',
+        )
+        self.assertEqual(object_metadata['TagCount'], 2)
+        self.assertNotIn('Body', object_metadata)
+
+    def test_object_metadata_from_first_get_for_multipart(self):
+        chunk_size = self.config.multipart_chunksize
+        total_size = chunk_size * 2 + 7
+        content = b'x' * total_size
+        self.stubber.add_response(
+            method='get_object',
+            service_response={
+                'Body': BytesIO(content[:chunk_size]),
+                'ContentRange': f'bytes 0-{chunk_size - 1}/{total_size}',
+                'ETag': self.etag,
+                'Metadata': {'part': '0'},
+            },
+        )
+        for i in (1, 2):
+            start = i * chunk_size
+            end = min(start + chunk_size, total_size)
+            self.stubber.add_response(
+                method='get_object',
+                service_response={
+                    'Body': BytesIO(content[start:end]),
+                    'Metadata': {'part': str(i)},
+                },
+            )
+
+        future = self.manager.download(self.bucket, self.key, self.filename)
+        future.result()
+
+        self.stubber.assert_no_pending_responses()
+        # Later ranged GETs must not overwrite the first response.
+        self.assertEqual(
+            future.meta.object_metadata['Metadata'], {'part': '0'}
+        )
+        self.assertEqual(
+            future.meta.object_metadata['ContentRange'],
+            f'bytes 0-{chunk_size - 1}/{total_size}',
+        )
 
     def test_first_get_uses_ifmatch_when_etag_provided(self):
         # If the caller pre-provides the ETag (e.g. via a subscriber from a
