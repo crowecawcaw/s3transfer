@@ -76,7 +76,7 @@ class BaseTransferMeta:
         raise NotImplementedError('user_context')
 
     @property
-    def object_metadata(self):
+    def response(self):
         """The S3 response describing the stored object
 
         ``None`` for transfer managers that do not record it.
@@ -143,7 +143,7 @@ class TransferMeta(BaseTransferMeta):
         self._size = None
         self._user_context = {}
         self._etag = None
-        self._object_metadata = None
+        self._response = None
 
     @property
     def call_args(self):
@@ -171,12 +171,13 @@ class TransferMeta(BaseTransferMeta):
         return self._etag
 
     @property
-    def object_metadata(self):
+    def response(self):
         """The S3 response describing the stored object
 
-        A dictionary of the parsed response, without ``Body`` and
-        ``ResponseMetadata``, from the request that best describes the
-        object once the transfer succeeds:
+        A copy of the parsed response from the request that best describes
+        the object once the transfer succeeds, without ``Body`` and
+        ``ResponseMetadata``. A transfer can make several requests, so this
+        is the response of one of them:
 
         * Downloads: the GetObject response for single-request downloads.
           For ranged downloads, the HeadObject response, or the first
@@ -194,7 +195,7 @@ class TransferMeta(BaseTransferMeta):
         ``None`` until the transfer has made that request, and ``None`` if
         the transfer fails.
         """
-        return self._object_metadata
+        return self._response
 
     def provide_transfer_size(self, size):
         """A method to provide the size of a transfer request
@@ -214,22 +215,26 @@ class TransferMeta(BaseTransferMeta):
         """
         self._etag = etag
 
-    def provide_object_metadata(self, response):
+    def _set_response(self, response):
         """A method to record the S3 response describing the object
 
         Passing ``None`` clears any previously recorded response.
         """
-        self._object_metadata = _filter_object_metadata(response)
+        self._response = _filter_response(response)
 
 
-def _filter_object_metadata(response):
+def _filter_response(response):
     if response is None:
         return None
-    return {
-        k: v
-        for k, v in response.items()
-        if k not in ('Body', 'ResponseMetadata')
-    }
+    # Deep copy so nested values such as Metadata are not shared with the
+    # botocore response.
+    return copy.deepcopy(
+        {
+            k: v
+            for k, v in response.items()
+            if k not in ('Body', 'ResponseMetadata')
+        }
+    )
 
 
 class TransferCoordinator:

@@ -208,7 +208,7 @@ class TestNonMultipartCopy(BaseCopyTest):
         future.result()
         self.stubber.assert_no_pending_responses()
 
-    def test_object_metadata_from_copy_object(self):
+    def test_response_from_copy_object(self):
         last_modified = datetime.datetime(
             2026, 1, 1, tzinfo=datetime.timezone.utc
         )
@@ -234,7 +234,7 @@ class TestNonMultipartCopy(BaseCopyTest):
         # members are flattened so ETag is at the top level for every
         # transfer type.
         self.assertEqual(
-            future.meta.object_metadata,
+            future.meta.response,
             {
                 'ETag': 'destetag',
                 'LastModified': last_modified,
@@ -725,7 +725,7 @@ class TestMultipartCopy(BaseCopyTest):
         future.result()
         self.stubber.assert_no_pending_responses()
 
-    def test_object_metadata_from_complete_multipart_upload(self):
+    def test_response_from_complete_multipart_upload(self):
         responses = self.create_stubbed_responses()
         responses[0]['service_response']['Metadata'] = {'from': 'source'}
         responses[-1]['service_response'] = {
@@ -741,7 +741,7 @@ class TestMultipartCopy(BaseCopyTest):
 
         self.stubber.assert_no_pending_responses()
         self.assertEqual(
-            future.meta.object_metadata,
+            future.meta.response,
             {
                 'ETag': 'destetag-3',
                 'VersionId': 'destversion',
@@ -749,7 +749,7 @@ class TestMultipartCopy(BaseCopyTest):
             },
         )
 
-    def test_object_metadata_is_none_when_copy_fails(self):
+    def test_response_is_none_when_copy_fails(self):
         self.add_head_object_response()
         self.add_create_multipart_upload_response()
         self.stubber.add_client_error('upload_part_copy', 'ArbitraryFailure')
@@ -759,7 +759,7 @@ class TestMultipartCopy(BaseCopyTest):
         with self.assertRaises(ClientError):
             future.result()
 
-        self.assertIsNone(future.meta.object_metadata)
+        self.assertIsNone(future.meta.response)
 
     def test_abort_on_failure(self):
         # First add the head object and create multipart upload

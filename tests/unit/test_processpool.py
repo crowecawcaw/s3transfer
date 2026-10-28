@@ -146,9 +146,9 @@ class TestProcessPoolTransferMeta(unittest.TestCase):
         meta.user_context['mykey'] = 'myvalue'
         self.assertEqual(meta.user_context, {'mykey': 'myvalue'})
 
-    def test_object_metadata_is_not_supported(self):
+    def test_response_is_not_supported(self):
         meta = ProcessPoolTransferMeta(1, CallArgs())
-        self.assertIsNone(meta.object_metadata)
+        self.assertIsNone(meta.response)
 
 
 class TestClientFactory(unittest.TestCase):

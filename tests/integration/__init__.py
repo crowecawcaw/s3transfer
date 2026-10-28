@@ -131,24 +131,24 @@ class BaseTransferManagerIntegTest(unittest.TestCase):
         self.addCleanup(self.delete_object, key)
         return filename
 
-    def assert_downloaded_object_metadata(self, future, key):
-        object_metadata = future.meta.object_metadata
+    def assert_downloaded_response(self, future, key):
+        recorded_response = future.meta.response
         head = self.client.head_object(Bucket=self.bucket_name, Key=key)
-        self.assertEqual(object_metadata['Metadata'], {'foo': 'bar'})
-        self.assertEqual(object_metadata['TagCount'], 2)
-        self.assertEqual(object_metadata['ETag'], head['ETag'])
-        self.assertEqual(object_metadata['ServerSideEncryption'], 'AES256')
-        self.assertNotIn('Body', object_metadata)
-        self.assertNotIn('ResponseMetadata', object_metadata)
+        self.assertEqual(recorded_response['Metadata'], {'foo': 'bar'})
+        self.assertEqual(recorded_response['TagCount'], 2)
+        self.assertEqual(recorded_response['ETag'], head['ETag'])
+        self.assertEqual(recorded_response['ServerSideEncryption'], 'AES256')
+        self.assertNotIn('Body', recorded_response)
+        self.assertNotIn('ResponseMetadata', recorded_response)
 
-    def assert_written_object_metadata(self, future, key):
+    def assert_written_response(self, future, key):
         """Assert the metadata of an uploaded or copied object"""
-        object_metadata = future.meta.object_metadata
+        recorded_response = future.meta.response
         head = self.client.head_object(Bucket=self.bucket_name, Key=key)
-        self.assertEqual(object_metadata['ETag'], head['ETag'])
-        self.assertEqual(object_metadata['ServerSideEncryption'], 'AES256')
-        self.assertNotIn('ResponseMetadata', object_metadata)
-        return object_metadata
+        self.assertEqual(recorded_response['ETag'], head['ETag'])
+        self.assertEqual(recorded_response['ServerSideEncryption'], 'AES256')
+        self.assertNotIn('ResponseMetadata', recorded_response)
+        return recorded_response
 
     def create_transfer_manager(self, config=None):
         return TransferManager(self.client, config=config)

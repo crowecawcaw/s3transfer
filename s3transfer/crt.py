@@ -45,7 +45,7 @@ from s3transfer.exceptions import TransferNotDoneError
 from s3transfer.futures import (
     BaseTransferFuture,
     BaseTransferMeta,
-    _filter_object_metadata,
+    _filter_response,
 )
 from s3transfer.manager import TransferManager
 from s3transfer.utils import (
@@ -426,7 +426,7 @@ class CRTTransferMeta(BaseTransferMeta):
         self._transfer_id = transfer_id
         self._call_args = call_args
         self._user_context = {}
-        self._object_metadata = None
+        self._response = None
 
     @property
     def call_args(self):
@@ -441,7 +441,7 @@ class CRTTransferMeta(BaseTransferMeta):
         return self._user_context
 
     @property
-    def object_metadata(self):
+    def response(self):
         """The S3 response describing the stored object
 
         Parsed from the response headers the CRT S3 client reports for the
@@ -449,14 +449,14 @@ class CRTTransferMeta(BaseTransferMeta):
         or CompleteMultipartUpload headers for uploads. ``None`` until the
         headers are received, and ``None`` if the transfer fails.
         """
-        return self._object_metadata
+        return self._response
 
-    def provide_object_metadata(self, response):
+    def _set_response(self, response):
         """A method to record the S3 response describing the object
 
         Passing ``None`` clears any previously recorded response.
         """
-        self._object_metadata = _filter_object_metadata(response)
+        self._response = _filter_response(response)
 
 
 class CRTTransferFuture(BaseTransferFuture):
@@ -486,9 +486,9 @@ class CRTTransferFuture(BaseTransferFuture):
             self._coordinator.result(timeout)
         except BaseException:
             # The CRT future can resolve before the on_done callbacks run,
-            # so clear the object metadata here too for failed transfers.
+            # so clear the response here too for failed transfers.
             if self._coordinator.done():
-                self._meta.provide_object_metadata(None)
+                self._meta._set_response(None)
             raise
 
     def cancel(self):
@@ -976,7 +976,7 @@ class S3ClientArgsCreator:
         )
         make_request_args['send_filepath'] = send_filepath
         make_request_args['checksum_config'] = checksum_config
-        self._record_object_metadata(
+        self._record_response(
             request_type, future, make_request_args, on_done_before_calls
         )
         if self._config is not None:
@@ -1019,7 +1019,7 @@ class S3ClientArgsCreator:
         make_request_args['recv_filepath'] = recv_filepath
         make_request_args['on_body'] = on_body
         make_request_args['checksum_config'] = checksum_config
-        self._record_object_metadata(
+        self._record_response(
             request_type, future, make_request_args, on_done_before_calls
         )
         if self._config is not None:
@@ -1028,10 +1028,10 @@ class S3ClientArgsCreator:
             )
         return make_request_args
 
-    def _record_object_metadata(
+    def _record_response(
         self, request_type, future, make_request_args, on_done_before_calls
     ):
-        recorder = ObjectMetadataRecorder(
+        recorder = _ResponseRecorder(
             future.meta, self._request_serializer, request_type
         )
         make_request_args['on_headers'] = recorder.on_headers
@@ -1116,7 +1116,7 @@ class RenameTempFileHandler:
                 self._coordinator.set_exception(e)
 
 
-class ObjectMetadataRecorder:
+class _ResponseRecorder:
     """Records the response headers describing the object on the meta"""
 
     def __init__(self, transfer_meta, request_serializer, transfer_type):
@@ -1132,11 +1132,11 @@ class ObjectMetadataRecorder:
         response = self._request_serializer.translate_crt_response_headers(
             self._transfer_type, status_code, headers
         )
-        self._transfer_meta.provide_object_metadata(response)
+        self._transfer_meta._set_response(response)
 
     def on_done(self, **kwargs):
         if kwargs.get('error'):
-            self._transfer_meta.provide_object_metadata(None)
+            self._transfer_meta._set_response(None)
 
 
 class AfterDoneHandler:

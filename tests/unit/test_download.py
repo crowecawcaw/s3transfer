@@ -613,7 +613,7 @@ class TestDownloadSubmissionTask(BaseSubmissionTaskTest):
         self.wait_and_assert_completed_successfully(self.submission_task)
 
         self.assertEqual(
-            self.transfer_future.meta.object_metadata,
+            self.transfer_future.meta.response,
             {'ETag': self.etag, 'Metadata': {'source': 'get-0'}},
         )
 
@@ -625,7 +625,7 @@ class TestDownloadSubmissionTask(BaseSubmissionTaskTest):
         self.wait_and_assert_completed_successfully(self.submission_task)
 
         self.assertEqual(
-            self.transfer_future.meta.object_metadata['Metadata'],
+            self.transfer_future.meta.response['Metadata'],
             {'source': 'head'},
         )
 
@@ -635,10 +635,10 @@ class TestDownloadSubmissionTask(BaseSubmissionTaskTest):
 
         self.wait_and_assert_completed_successfully(self.submission_task)
 
-        object_metadata = self.transfer_future.meta.object_metadata
-        self.assertEqual(object_metadata['Metadata'], {'source': 'get-0'})
-        self.assertEqual(object_metadata['ETag'], self.etag)
-        self.assertNotIn('Body', object_metadata)
+        recorded_response = self.transfer_future.meta.response
+        self.assertEqual(recorded_response['Metadata'], {'source': 'get-0'})
+        self.assertEqual(recorded_response['ETag'], self.etag)
+        self.assertNotIn('Body', recorded_response)
 
     def test_records_first_chunk_response_without_head_object(self):
         self.reset_stubber_with_new_client(
@@ -659,9 +659,9 @@ class TestDownloadSubmissionTask(BaseSubmissionTaskTest):
         self.submission_task = self.get_download_submission_task()
         self.wait_and_assert_completed_successfully(self.submission_task)
 
-        object_metadata = self.transfer_future.meta.object_metadata
-        self.assertEqual(object_metadata['Metadata'], {'source': 'get-0'})
-        self.assertNotIn('Body', object_metadata)
+        recorded_response = self.transfer_future.meta.response
+        self.assertEqual(recorded_response['Metadata'], {'source': 'get-0'})
+        self.assertNotIn('Body', recorded_response)
 
     def test_records_first_ranged_get_response_when_head_is_skipped(self):
         self.configure_for_ranged_get()
@@ -672,7 +672,7 @@ class TestDownloadSubmissionTask(BaseSubmissionTaskTest):
 
         # Only the first part's response is recorded.
         self.assertEqual(
-            self.transfer_future.meta.object_metadata['Metadata'],
+            self.transfer_future.meta.response['Metadata'],
             {'source': 'get-0'},
         )
 
@@ -745,7 +745,7 @@ class TestGetObjectTask(BaseTaskTest):
         task()
 
         self.assertEqual(
-            transfer_meta.object_metadata,
+            transfer_meta.response,
             {'ETag': 'myetag', 'Metadata': {'foo': 'bar'}, 'TagCount': 2},
         )
 
@@ -852,7 +852,7 @@ class TestGetObjectTask(BaseTaskTest):
         task()
 
         self.assertEqual(
-            transfer_meta.object_metadata, {'Metadata': {'attempt': '2'}}
+            transfer_meta.response, {'Metadata': {'attempt': '2'}}
         )
 
     def test_does_not_record_response_that_fails_validation(self):
@@ -871,7 +871,7 @@ class TestGetObjectTask(BaseTaskTest):
         self.assertIsInstance(
             self.transfer_coordinator.exception, S3ValidationError
         )
-        self.assertIsNone(transfer_meta.object_metadata)
+        self.assertIsNone(transfer_meta.response)
 
     def test_retries_failure(self):
         for _ in range(self.max_attempts):

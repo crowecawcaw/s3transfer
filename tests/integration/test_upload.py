@@ -56,7 +56,7 @@ class TestUpload(BaseTransferManagerIntegTest):
         future.result()
         self.assertTrue(self.object_exists('20mb.txt'))
 
-    def test_object_metadata_below_threshold(self):
+    def test_response_below_threshold(self):
         transfer_manager = self.create_transfer_manager(self.config)
         key = 'metadata-1mb.txt'
         file = self.get_input_fileobj(size=1024 * 1024, name='1mb.txt')
@@ -69,11 +69,11 @@ class TestUpload(BaseTransferManagerIntegTest):
         self.addCleanup(self.delete_object, key)
 
         future.result()
-        object_metadata = self.assert_written_object_metadata(future, key)
+        recorded_response = self.assert_written_response(future, key)
         # A single PutObject has a plain MD5 ETag.
-        self.assertNotIn('-', object_metadata['ETag'])
+        self.assertNotIn('-', recorded_response['ETag'])
 
-    def test_object_metadata_above_threshold(self):
+    def test_response_above_threshold(self):
         transfer_manager = self.create_transfer_manager(self.config)
         key = 'metadata-20mb.txt'
         file = self.get_input_fileobj(size=20 * 1024 * 1024, name='20mb.txt')
@@ -86,9 +86,9 @@ class TestUpload(BaseTransferManagerIntegTest):
         self.addCleanup(self.delete_object, key)
 
         future.result()
-        object_metadata = self.assert_written_object_metadata(future, key)
+        recorded_response = self.assert_written_response(future, key)
         # A multipart upload ETag ends with the number of parts.
-        self.assertRegex(object_metadata['ETag'], r'-\d+"$')
+        self.assertRegex(recorded_response['ETag'], r'-\d+"$')
 
     @skip_if_using_serial_implementation(
         'Exception is thrown once the transfer is submitted. '

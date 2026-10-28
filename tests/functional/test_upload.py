@@ -165,7 +165,7 @@ class TestNonMultipartUpload(BaseUploadTest):
     def assert_put_object_body_was_correct(self):
         self.assertEqual(self.sent_bodies, [self.content])
 
-    def test_object_metadata_from_put_object(self):
+    def test_response_from_put_object(self):
         self.stubber.add_response(
             method='put_object',
             service_response={
@@ -178,11 +178,11 @@ class TestNonMultipartUpload(BaseUploadTest):
         future = self.manager.upload(
             self.filename, self.bucket, self.key, self.extra_args
         )
-        self.assertIsNone(future.meta.object_metadata)
+        self.assertIsNone(future.meta.response)
         future.result()
 
         self.assertEqual(
-            future.meta.object_metadata,
+            future.meta.response,
             {
                 'ETag': 'myetag',
                 'VersionId': 'myversion',
@@ -519,7 +519,7 @@ class TestMultipartUpload(BaseUploadTest):
         response['expected_params'] = expected_params
         self.stubber.add_response(**response)
 
-    def test_object_metadata_from_complete_multipart_upload(self):
+    def test_response_from_complete_multipart_upload(self):
         responses = self.create_stubbed_responses()
         # CreateMultipartUpload and UploadPart responses describe the upload
         # and its parts, not the object, so they must not be recorded.
@@ -539,7 +539,7 @@ class TestMultipartUpload(BaseUploadTest):
 
         self.stubber.assert_no_pending_responses()
         self.assertEqual(
-            future.meta.object_metadata,
+            future.meta.response,
             {
                 'ETag': 'myetag-3',
                 'VersionId': 'myversion',

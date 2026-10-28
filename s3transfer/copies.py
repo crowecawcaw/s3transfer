@@ -421,7 +421,7 @@ class CopyCompleteMultipartUploadTask(CompleteMultipartUploadTask):
             client, call_args, source_version_id, dest_version_id, dest_etag
         )
         if transfer_meta is not None:
-            transfer_meta.provide_object_metadata(response)
+            transfer_meta._set_response(response)
 
     def _apply_tags(
         self, client, call_args, source_version_id, dest_version_id
@@ -570,9 +570,11 @@ class CopyObjectTask(Task):
         if transfer_meta is not None:
             # Flatten CopyObjectResult so ETag is at the top level, as it is
             # for every other transfer type.
-            object_metadata = dict(response)
-            object_metadata.update(object_metadata.pop('CopyObjectResult', {}))
-            transfer_meta.provide_object_metadata(object_metadata)
+            recorded_response = dict(response)
+            recorded_response.update(
+                recorded_response.pop('CopyObjectResult', {})
+            )
+            transfer_meta._set_response(recorded_response)
         for callback in callbacks:
             callback(bytes_transferred=size)
 

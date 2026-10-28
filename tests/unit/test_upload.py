@@ -681,7 +681,7 @@ class TestPutObjectTask(BaseUploadTest):
             task()
             self.stubber.assert_no_pending_responses()
         self.assertEqual(
-            transfer_meta.object_metadata,
+            transfer_meta.response,
             {
                 'ETag': 'myetag',
                 'VersionId': 'myversion',

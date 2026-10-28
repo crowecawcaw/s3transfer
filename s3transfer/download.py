@@ -389,7 +389,7 @@ class DownloadSubmissionTask(SubmissionTask):
             # Provide an etag to ensure a stored object is not modified
             # during a multipart download.
             transfer_future.meta.provide_object_etag(response.get('ETag'))
-            transfer_future.meta.provide_object_metadata(response)
+            transfer_future.meta._set_response(response)
 
         # If it is greater than threshold do a ranged download, otherwise
         # do a regular GetObject download.
@@ -507,7 +507,7 @@ class DownloadSubmissionTask(SubmissionTask):
             )
         )
         # Every part is pinned to the same ETag, so only the first ranged
-        # GET needs to record the object metadata. Its ContentLength and
+        # GET needs to record the response. Its ContentLength and
         # ContentRange describe that part rather than the whole object,
         # which is accepted to avoid rewriting the S3 response.
         transfer_meta = self._get_transfer_meta_to_record(transfer_future)
@@ -554,7 +554,7 @@ class DownloadSubmissionTask(SubmissionTask):
         # The HeadObject response is used when available. Otherwise, such as
         # when the caller provided both the size and etag, the first
         # GetObject response is recorded instead.
-        if transfer_future.meta.object_metadata is None:
+        if transfer_future.meta.response is None:
             return transfer_future.meta
         return None
 
@@ -839,7 +839,7 @@ class GetObjectTask(Task):
                     response.get('ContentRange'),
                 )
                 if transfer_meta is not None:
-                    transfer_meta.provide_object_metadata(response)
+                    transfer_meta._set_response(response)
                 streaming_body = StreamReaderProgress(
                     response['Body'], callbacks
                 )

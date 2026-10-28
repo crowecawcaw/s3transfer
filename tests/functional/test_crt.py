@@ -276,7 +276,7 @@ class TestCRTTransferManager(unittest.TestCase):
         )
         self._assert_subscribers_called(future)
 
-    def test_upload_records_object_metadata(self):
+    def test_upload_records_response(self):
         self.response_headers = [
             ('ETag', '"myetag-3"'),
             ('x-amz-version-id', 'myversion'),
@@ -292,7 +292,7 @@ class TestCRTTransferManager(unittest.TestCase):
         future.result()
 
         self.assertEqual(
-            future.meta.object_metadata,
+            future.meta.response,
             {
                 'ETag': '"myetag-3"',
                 'VersionId': 'myversion',
@@ -571,7 +571,7 @@ class TestCRTTransferManager(unittest.TestCase):
             # Check the fake response overwrites the file because of download
             self.assertEqual(f.read(), self.expected_download_content)
 
-    def test_download_records_object_metadata(self):
+    def test_download_records_response(self):
         self.response_headers = [
             ('ETag', '"myetag"'),
             ('Content-Length', '11'),
@@ -588,7 +588,7 @@ class TestCRTTransferManager(unittest.TestCase):
         future.result()
 
         self.assertEqual(
-            future.meta.object_metadata,
+            future.meta.response,
             {
                 'ETag': '"myetag"',
                 'ContentLength': 11,
@@ -606,9 +606,9 @@ class TestCRTTransferManager(unittest.TestCase):
         )
         future.result()
 
-        self.assertIsNone(future.meta.object_metadata)
+        self.assertIsNone(future.meta.response)
 
-    def test_download_object_metadata_is_none_when_download_fails(self):
+    def test_download_response_is_none_when_download_fails(self):
         error = awscrt.exceptions.AwsCrtError(
             code=0, name='AWS_ERROR_S3_RESPONSE_CHECKSUM_MISMATCH', message=''
         )
@@ -625,25 +625,25 @@ class TestCRTTransferManager(unittest.TestCase):
         self.s3_crt_client.make_request.side_effect = make_request
         seen_by_subscriber = []
 
-        class ObjectMetadataSubscriber(BaseSubscriber):
+        class ResponseSubscriber(BaseSubscriber):
             def on_done(self, future, **kwargs):
-                seen_by_subscriber.append(future.meta.object_metadata)
+                seen_by_subscriber.append(future.meta.response)
 
         future = self.transfer_manager.download(
             self.bucket,
             self.key,
             self.filename,
             {},
-            [ObjectMetadataSubscriber()],
+            [ResponseSubscriber()],
         )
         with self.assertRaises(awscrt.exceptions.AwsCrtError):
             future.result()
 
         # Subscribers must not see the metadata of a failed transfer.
         self.assertEqual(seen_by_subscriber, [None])
-        self.assertIsNone(future.meta.object_metadata)
+        self.assertIsNone(future.meta.response)
 
-    def test_object_metadata_is_none_when_result_raises_before_on_done(self):
+    def test_response_is_none_when_result_raises_before_on_done(self):
         # The CRT future resolves before the on_done callbacks run.
         error = awscrt.exceptions.AwsCrtError(
             code=0, name='AWS_ERROR_S3_RESPONSE_CHECKSUM_MISMATCH', message=''
@@ -661,12 +661,12 @@ class TestCRTTransferManager(unittest.TestCase):
             self.bucket, self.key, self.filename, {}, [self.record_subscriber]
         )
         self.assertEqual(
-            future.meta.object_metadata, {'ETag': '"myetag"', 'Metadata': {}}
+            future.meta.response, {'ETag': '"myetag"', 'Metadata': {}}
         )
         with self.assertRaises(awscrt.exceptions.AwsCrtError):
             future.result()
 
-        self.assertIsNone(future.meta.object_metadata)
+        self.assertIsNone(future.meta.response)
 
     def test_download_to_seekable_stream(self):
         with open(self.filename, 'wb') as f:
@@ -799,14 +799,14 @@ class TestCRTTransferManager(unittest.TestCase):
         )
         self._assert_subscribers_called(future)
 
-    def test_delete_does_not_record_object_metadata(self):
+    def test_delete_does_not_record_response(self):
         self.response_headers = [('x-amz-version-id', 'myversion')]
         future = self.transfer_manager.delete(
             self.bucket, self.key, {}, [self.record_subscriber]
         )
         future.result()
 
-        self.assertIsNone(future.meta.object_metadata)
+        self.assertIsNone(future.meta.response)
 
     def test_delete_throws_error_for_unsupported_arg(self):
         with self.assertRaisesRegex(

@@ -91,7 +91,7 @@ class TestDownload(BaseTransferManagerIntegTest):
         future.result()
         assert_files_equal(filename, download_path)
 
-    def assert_object_metadata_after_download(
+    def assert_response_after_download(
         self, key, filesize, provide_size_and_etag=False
     ):
         filename = self.put_object_with_metadata(key, filesize)
@@ -110,27 +110,27 @@ class TestDownload(BaseTransferManagerIntegTest):
         )
         future.result()
         assert_files_equal(filename, download_path)
-        self.assert_downloaded_object_metadata(future, key)
+        self.assert_downloaded_response(future, key)
 
-    def test_object_metadata_below_threshold(self):
-        self.assert_object_metadata_after_download(
+    def test_response_below_threshold(self):
+        self.assert_response_after_download(
             'metadata-1mb.txt', filesize=1024 * 1024
         )
 
-    def test_object_metadata_above_threshold(self):
-        self.assert_object_metadata_after_download(
+    def test_response_above_threshold(self):
+        self.assert_response_after_download(
             'metadata-20mb.txt', filesize=20 * 1024 * 1024
         )
 
-    def test_object_metadata_below_threshold_with_size_and_etag(self):
-        self.assert_object_metadata_after_download(
+    def test_response_below_threshold_with_size_and_etag(self):
+        self.assert_response_after_download(
             'provided-1mb.txt',
             filesize=1024 * 1024,
             provide_size_and_etag=True,
         )
 
-    def test_object_metadata_above_threshold_with_size_and_etag(self):
-        self.assert_object_metadata_after_download(
+    def test_response_above_threshold_with_size_and_etag(self):
+        self.assert_response_after_download(
             'provided-20mb.txt',
             filesize=20 * 1024 * 1024,
             provide_size_and_etag=True,

@@ -399,4 +399,4 @@ class CompleteMultipartUploadTask(Task):
             **extra_args,
         )
         if transfer_meta is not None:
-            transfer_meta.provide_object_metadata(response)
+            transfer_meta._set_response(response)

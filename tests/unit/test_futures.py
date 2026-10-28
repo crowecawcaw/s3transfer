@@ -147,8 +147,8 @@ class TestTransferFuture(unittest.TestCase):
 
 
 class TestBaseTransferMeta(unittest.TestCase):
-    def test_object_metadata_defaults_to_none(self):
-        self.assertIsNone(BaseTransferMeta().object_metadata)
+    def test_response_defaults_to_none(self):
+        self.assertIsNone(BaseTransferMeta().response)
 
 
 class TestTransferMeta(unittest.TestCase):
@@ -174,9 +174,9 @@ class TestTransferMeta(unittest.TestCase):
         self.transfer_meta.user_context['foo'] = 'bar'
         self.assertEqual(self.transfer_meta.user_context, {'foo': 'bar'})
 
-    def test_object_metadata(self):
-        self.assertIsNone(self.transfer_meta.object_metadata)
-        self.transfer_meta.provide_object_metadata(
+    def test_response(self):
+        self.assertIsNone(self.transfer_meta.response)
+        self.transfer_meta._set_response(
             {
                 'Body': object(),
                 'ResponseMetadata': {'HTTPStatusCode': 200},
@@ -187,7 +187,7 @@ class TestTransferMeta(unittest.TestCase):
             }
         )
         self.assertEqual(
-            self.transfer_meta.object_metadata,
+            self.transfer_meta.response,
             {
                 'ETag': 'myetag',
                 'Metadata': {'foo': 'bar'},
@@ -196,10 +196,22 @@ class TestTransferMeta(unittest.TestCase):
             },
         )
 
-    def test_object_metadata_can_be_cleared(self):
-        self.transfer_meta.provide_object_metadata({'ETag': 'myetag'})
-        self.transfer_meta.provide_object_metadata(None)
-        self.assertIsNone(self.transfer_meta.object_metadata)
+    def test_response_is_a_deep_copy(self):
+        response = {'ETag': 'myetag', 'Metadata': {'foo': 'bar'}}
+        self.transfer_meta._set_response(response)
+        response['Metadata']['foo'] = 'changed'
+        self.transfer_meta.response['Metadata']['new'] = 'value'
+
+        self.assertEqual(
+            self.transfer_meta.response['Metadata'],
+            {'foo': 'bar', 'new': 'value'},
+        )
+        self.assertEqual(response['Metadata'], {'foo': 'changed'})
+
+    def test_response_can_be_cleared(self):
+        self.transfer_meta._set_response({'ETag': 'myetag'})
+        self.transfer_meta._set_response(None)
+        self.assertIsNone(self.transfer_meta.response)
 
 
 class TestTransferCoordinator(unittest.TestCase):

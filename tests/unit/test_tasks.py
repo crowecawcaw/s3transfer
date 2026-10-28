@@ -879,7 +879,7 @@ class TestCompleteMultipartUploadTask(BaseMultipartTaskTest):
         task()
         self.stubber.assert_no_pending_responses()
         self.assertEqual(
-            transfer_meta.object_metadata,
+            transfer_meta.response,
             {
                 'ETag': 'myetag-1',
                 'VersionId': 'myversion',

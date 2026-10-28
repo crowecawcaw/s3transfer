@@ -611,9 +611,9 @@ class TransferManager:
             transfer_coordinator,
         )
         transfer_meta = TransferMeta(call_args, transfer_id=transfer_id)
-        # Only expose the object metadata for transfers that succeed.
+        # Only expose the response for transfers that succeed.
         transfer_coordinator.add_failure_cleanup(
-            transfer_meta.provide_object_metadata, None
+            transfer_meta._set_response, None
         )
         components = {
             'meta': transfer_meta,

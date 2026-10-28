@@ -802,7 +802,7 @@ class PutObjectTask(Task):
                 Bucket=bucket, Key=key, Body=body, **extra_args
             )
         if transfer_meta is not None:
-            transfer_meta.provide_object_metadata(response)
+            transfer_meta._set_response(response)
 
 
 class UploadPartTask(Task):
